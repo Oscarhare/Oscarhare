@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta author="Luis Oscar Herrera Valdez">
+  <meta name="description" content="Explora escalas y acordes musicales en distintos sistemas de afinación con nuestra calculadora de frecuencias. Calcula valores precisos y genera listas en diversos tonos para tu análisis musical.">
+
+   <title>Calculadora de frecuencias EDO v3.4.3</title>
+
+ <style>
+    .highlighted-lightgray {
+      background-color: lightgray;
+      border: 1px solid blue;
+    }
+
+    .highlighted-darkgray {
+      background-color: gray;
+      border: 2px solid black;
+    }
+
+    .highlighted-lightgray:hover {
+      background-color: #e0e0e0;
+      border: 1px solid blue;
+    }
+
+    .highlighted-darkgray:hover {
+      background-color: #b0b0b0;
+      border: 2px solid black;
+    }
+
+    td {
+      font-size: 0.875em; /* 14px/16=0.875em */
+      color: blue;
+    }
+
+     .container {
+      display:block;
+      column-gap:1px;
+      width:600px;
+      height:100%;
+      border: 1px solid black;
+    
+	    }
+
+    button.highlighted {
+      border: 2px solid red;
+      color: white;
+      background-color: blue;
+    }
+
+    button, label, table, tbody, tr, td, p {
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      -khtml-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+      user-select: none;
+
+    button {
+
+     height: 100%;
+    }
+    
+
+    </style>
+</head>
+<body>
+
+  <label for="A">Base:</label>
+    <input style="width: 40px;" type="text" id="A" value="440"><br>
+    <input style="width: 40px;" type="text" id="c" value="12">
+    <label for="c">TET</label><br>
+    <label for="b">Intervalos (,):<br></label>
+    <input type="text" id="b" value="0">
+    <br>
+    <button onclick="calcularFrecuencias()">Calcular Frecuencias</button>
+    <br>
+    <label for="gananciaInput">🔉</label>
+    <input style="width: 50px;" type="number" id="gananciaInput" value="0.09" max="1" min="0" step="0.01">
+    <label for="tipoOnda"> 〰️</label>
+    <select id="tipoOnda" onchange="cambiarTipoOnda()">
+      <option value="sawtooth">Sawtooth</option>
+      <option value="sine">Sine</option>
+      <option value="square">Square</option>
+      <option value="triangle">Triangle</option>
+    </select>
+    <br>
+    <input type="number" id="numColumnas" min="1" max="3" value="1">
+    <button onclick="aplicarColumnas()">Columnas</button>
+   
+    <div id="resultado" class="container"></div>
+    
+    <button onClick="detenerTodo()">⏹️</button>
+    
+    <div class="esto"> 
+    <p><label><input type="checkbox" id="select-number" checked>#</label>
+      <label><input type="checkbox" id="select-frequency" checked>Hz</label>
+      <label><input type="checkbox" id="select-cents" checked>¢</label>
+<label><input type="checkbox" id="select-ratios" checked>r</label>
+   </p>
+   </div>
+   
+   <button onclick="obtenerNumerosSeparadosPorComas()">Obtener Números</button>
+   
+    <div style="width: 190px;" id="resultadosSeparadosPorComas"></div>
+  
+
+  <script>
+    let audioContext;
+
+    function initAudioContext() {
+      if (!audioContext) {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      }
+    }
+
+    let osciladores = [];
+
+    function toggleSonido(button, frecuencia) {
+      initAudioContext();
+
+      const osciladorExistente = osciladores.find(osc => osc.frecuencia === frecuencia);
+      if (osciladorExistente) {
+        detenerSonido(frecuencia);
+        button.classList.remove('highlighted');
+      } else {
+        reproducirSonido(frecuencia);
+        button.classList.add('highlighted');
+      }
+    }
+
+    function reproducirSonido(frecuencia) {
+      const gananciaInput = parseFloat(document.getElementById('gananciaInput').value);
+      iniciarSonido(frecuencia, gananciaInput);
+    }
+
+    function iniciarSonido(frecuencia, gananciaInput) {
+      if (gananciaInput < 0 || gananciaInput > 1 || isNaN(gananciaInput)) {
+        document.getElementById('resultado').innerHTML = 'Introduce un valor entre 0 y 1<br>para "Vol", puedes usar decimales. <br>Recomendado: 0.08';
+        return;
+      }
+
+      if (!audioContext) {
+        initAudioContext();
+      }
+
+      const oscilador = audioContext.createOscillator();
+      oscilador.type = document.getElementById('tipoOnda').value;
+      oscilador.frequency.value = frecuencia;
+
+      const gananciaValidada = Math.max(0, Math.min(1, gananciaInput));
+      const ganancia = audioContext.createGain();
+      ganancia.gain.value = gananciaValidada;
+
+      oscilador.connect(ganancia);
+      ganancia.connect(audioContext.destination);
+
+      oscilador.start();
+      osciladores.push({ frecuencia, oscilador });
+
+      console.log(`Iniciado sonido para frecuencia: ${frecuencia} Hz`);
+    }
+
+    function detenerSonido(frecuencia) {
+      osciladores = osciladores.filter(oscObj => {
+        if (oscObj.frecuencia === frecuencia) {
+          oscObj.oscilador.stop();
+          return false;
+        }
+        return true;
+      });
+
+      console.log(`Detenido sonido para frecuencia: ${frecuencia} Hz`);
+    }
+
+    function detenerTodo() {
+      quitarResaltados();
+      osciladores.forEach(oscObj => oscObj.oscilador.stop());
+      osciladores = [];
+    }
+
+    function cambiarTipoOnda() {
+      const tipoOndaSelect = document.getElementById('tipoOnda');
+      const nuevoTipoOnda = tipoOndaSelect.value;
+
+      osciladores.forEach(oscObj => {
+        oscObj.oscilador.type = nuevoTipoOnda;
+      });
+    }
+
+    function quitarResaltados() {
+      const highlightedElements = document.querySelectorAll('.highlighted');
+      if (highlightedElements.length > 0) {
+        highlightedElements.forEach(element => {
+          element.classList.remove('highlighted');
+        });
+      }
+    }
+
+    function aplicarColumnas() {
+      const numColumnas = parseInt(document.getElementById('numColumnas').value);
+      const container = document.querySelector('.container');
+      const tablas = document.querySelectorAll('table');
+
+      if (numColumnas === 1 || numColumnas === 2 || numColumnas === 3) {
+        container.style.columnCount = numColumnas;
+        tablas.forEach(tabla => {
+          tabla.style.display = 'block';
+          tabla.style.width = numColumnas === 1 ? '100%' : `calc(100%/ ${numColumnas})`;
+        });
+      } else {
+        alert('Por favor, elija 1, 2 o 3 columnas.');
+      }
+    }
+
+  function obtenerNumerosSeparadosPorComas() {
+  let tabla;
+  const tablaSpecific = document.getElementById('specific-values');
+  const tablaFrequencies = document.getElementById('frequencies-table');
+
+  if (tablaSpecific) {
+    tabla = tablaSpecific;
+  } else if (tablaFrequencies) {
+    tabla = tablaFrequencies;
+  } else {
+    console.error('No se encontró ninguna tabla para obtener los números separados por comas.');
+    return;
+  }
+
+  const filas = tabla.querySelectorAll('tbody tr');
+  if (filas.length === 0) {
+    console.error('No hay filas en la tabla.');
+    return;
+  }
+
+  // Obtener la frecuencia base del primer intervalo (primer valor de la segunda columna)
+  const frecuenciaBase = parseFloat(filas[0].querySelector('td:nth-child(2)').textContent.trim());
+
+  let numerosSeparadosPorComas = '';
+
+  const selectNumber = document.getElementById('select-number').checked;
+  const selectFrequency = document.getElementById('select-frequency').checked;
+  const selectCents = document.getElementById('select-cents').checked;
+  const selectRatios = document.getElementById('select-ratios').checked;
+
+  filas.forEach(fila => {
+    const valores = [];
+    if (selectNumber) {
+      valores.push(fila.querySelector('td:nth-child(1)').textContent.trim());
+    }
+    if (selectFrequency) {
+      valores.push(fila.querySelector('td:nth-child(2)').textContent.trim());
+    }
+    if (selectCents) {
+      valores.push(fila.querySelector('td:nth-child(3)').textContent.trim());
+    }
+
+    if (selectRatios) {
+      const frequencyCell = fila.querySelector('td:nth-child(2)');
+      if (frequencyCell) {
+        const frecuencia = parseFloat(frequencyCell.textContent.trim());
+        const ratio = frecuencia / frecuenciaBase;
+        valores.push(ratio.toFixed(5)); // Limitar a 5 decimales, por ejemplo
+      }
+    }
+
+    numerosSeparadosPorComas += valores.join(', ') + ', ';
+  });
+
+  numerosSeparadosPorComas = numerosSeparadosPorComas.slice(0, -2);
+
+  const resultadosSeparadosPorComas = document.getElementById('resultadosSeparadosPorComas');
+  if (resultadosSeparadosPorComas) {
+    resultadosSeparadosPorComas.textContent = numerosSeparadosPorComas;
+  } else {
+    console.error('No se encontró un área para mostrar los números separados por comas.');
+  }
+}
+    function calcularFrecuencias() {
+      const gananciaInput = parseFloat(document.getElementById('gananciaInput').value);
+      const A = parseFloat(document.getElementById('A').value);
+      const c = parseInt(document.getElementById('c').value, 10);
+      const b = document.getElementById('b').value.trim();
+
+      if (isNaN(A) || isNaN(c)  || !Number.isInteger(c)|| c <= 0) {
+        document.getElementById('resultado').innerHTML = 'Entrada no válida. Por favor, ingrese números válidos.';
+        return;
+      }
+
+      const minFrequency = 20;
+      const maxFrequency = 20000;
+
+
+  if (b.includes('/')) {
+    // Procesamiento de pasos (steps)
+    const steps = b.split('/').map(step => parseInt(step.trim(), 10));
+    let listaHTML = '';
+    let acumulado = 0;
+
+
+listaHTML += `<table id="specific-values">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Hz</th>
+              <th>¢</th>
+              <th><button onClick="detenerTodo()">⏹️</button></th>
+            </tr>
+          </thead>
+          <tbody>`;
+
+
+    // Cálculo de frecuencias para cada paso acumulativo
+    steps.forEach((step, index) => {
+      if (!isNaN(step)) {
+        acumulado += step; // Sumar el paso al acumulado
+        if (acumulado <= c || acumulado > c) {
+          const frequency = calcularFrecuenciaFormula(A, c, acumulado);
+          if (frequency >= minFrequency && frequency <= maxFrequency) {
+            const cents = calcularCents(A, frequency);
+
+            listaHTML += `<tr style="cursor: pointer;"><td onclick="toggleHighlight(this)" style="text-align:center">${acumulado}</td><td style="text-align:center" onclick="toggleHighlight(this)">${frequency.toFixed(3)}</td><td onclick="toggleHighlight(this)" style="text-align:center">${cents.toFixed(3)}</td><td style="width:35px;text-align:right;"><button onmousedown="handlePress(this, ${frequency})" ontouchstart="handlePress(this, ${frequency})" onmouseup="handleRelease(this, ${frequency})" ontouchend="handleRelease(this, ${frequency})">▶</button></td><td><button onmouseup="toggleSonido(this, ${frequency})">🎹</button></td></tr>`;
+          }
+        }
+      }
+    });
+
+   listaHTML += `</tbody></table>`;
+        document.getElementById('resultado').innerHTML = listaHTML;
+        return;
+  }
+      
+
+
+if (b.includes(',')) {
+        const values = b.split(',').map(intervalo => parseInt(intervalo.trim(), 10));
+        let listaHTML = '';
+
+        listaHTML += `<table id="specific-values">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Hz</th>
+              <th>¢</th>
+              <th><button onClick="detenerTodo()">⏹️</button></th>
+            </tr>
+          </thead>
+          <tbody>`;
+
+        values.forEach(intervalo => {
+          if (!isNaN(intervalo)) {
+            const frequency = calcularFrecuenciaFormula(A, c, intervalo);
+            if (frequency >= minFrequency && frequency <= maxFrequency) {
+              const cents = calcularCents(A, frequency);
+              listaHTML += `<tr style="cursor: pointer;"> 
+                <td onclick="toggleHighlight(this)" style="text-align:center">${intervalo}</td>
+                <td style="text-align:center" onclick="toggleHighlight(this)">${frequency.toFixed(3)}</td>
+                <td onclick="toggleHighlight(this)" style="text-align:center">${cents.toFixed(3)}</td>
+                <td style="width:35px;text-align:right;">
+                  <button  
+       onmousedown="handlePress(this, ${frequency})" 
+          ontouchstart="handlePress(this, ${frequency})" 
+          onmouseup="handleRelease(this, ${frequency})" 
+          ontouchend="handleRelease(this, ${frequency})">▶</button>
+                </td>
+                <td><button onmouseup="toggleSonido(this, ${frequency})">🎹</button>
+
+</td>
+              </tr>`;
+            }
+          }
+        });
+
+        listaHTML += `</tbody></table>`;
+        document.getElementById('resultado').innerHTML = listaHTML;
+        return;
+      }
+
+
+
+
+      let resultHTML = '';
+      const frequencyB = calcularFrecuenciaFormula(A, c, b);
+      resultHTML += `<p> → ${frequencyB.toFixed(2)} Hz </p>`;
+      resultHTML += `<table id="frequencies-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Hz</th>
+            <th>¢</th>
+            <th><button onClick="detenerTodo()">⏹️</button></th>
+          </tr>
+        </thead>
+        <tbody>`;
+
+      for (let i = 0; i <= c; i++) {
+        const frequency = calcularFrecuenciaFormula(A, c, i);
+        if (frequency >= minFrequency && frequency <= maxFrequency) {
+          const cents = calcularCents(A, frequency);
+          resultHTML += `<tr style="cursor: pointer;"> 
+            <td onclick="toggleHighlight(this)" style="text-align:center">${i}</td>
+            <td style="text-align:center" onclick="toggleHighlight(this)">${frequency.toFixed(3)}</td>
+            <td onclick="toggleHighlight(this)" style="text-align:center">${cents.toFixed(3)}</td>
+            <td style="width:35px;text-align:right;">
+              <button  
+       onmousedown="handlePress(this, ${frequency})" 
+          ontouchstart="handlePress(this, ${frequency})" 
+          onmouseup="handleRelease(this, ${frequency})" 
+          ontouchend="handleRelease(this, ${frequency})">▶</button>
+            </td>
+            <td><button onmouseup="toggleSonido(this, ${frequency})">🎹</button></td>
+          </tr>`;
+        }
+      }
+
+      if (b > c) {
+        for (let i = c + 1; i <= b; i++) {
+          const frequency = calcularFrecuenciaFormula(A, c, i);
+          if (frequency >= minFrequency && frequency <= maxFrequency) {
+            const cents = calcularCents(A, frequency);
+            resultHTML += `<tr style="cursor: pointer;">
+              <td onclick="toggleHighlight(this)" style="text-align:center">${i}</td>
+              <td style="text-align:center" onclick="toggleHighlight(this)">${frequency.toFixed(2)}</td>
+              <td onclick="toggleHighlight(this)" style="text-align:center">${cents.toFixed(2)}</td>
+              <td style="width:35px;text-align:right;">
+               <button  
+       onmousedown="handlePress(this, ${frequency})" 
+          ontouchstart="handlePress(this, ${frequency})" 
+          onmouseup="handleRelease(this, ${frequency})" 
+          ontouchend="handleRelease(this, ${frequency})">▶</button>
+              </td>
+              <td><button onmouseup="toggleSonido(this, ${frequency})">🎹</button></td>
+            </tr>`;
+          }
+        }
+      }
+
+      resultHTML += `</tbody></table>`;
+      document.getElementById('resultado').innerHTML = resultHTML;
+    }
+
+    function calcularFrecuenciaFormula(A, c, b) {
+      return A * Math.pow(2, b / c);
+    }
+
+    function calcularCents(A, frequency) {
+      const centsInOctave = 1200;
+      const ratio = frequency / A;
+      return Math.log2(ratio) * centsInOctave;
+    }
+
+    function toggleHighlight(element) {
+      if (element.classList.contains('highlighted-lightgray')) {
+        element.classList.remove('highlighted-lightgray');
+        element.classList.add('highlighted-darkgray');
+      } else if (element.classList.contains('highlighted-darkgray')) {
+        element.classList.remove('highlighted-darkgray');
+      } else {
+        element.classList.add('highlighted-lightgray');
+      }
+    }
+
+    function changeButtonStyle(element) {
+      if (element.classList.contains('highlighted')) {
+        element.classList.remove('highlighted');
+      } else {
+        element.classList.add('highlighted');
+      }
+    }
+
+function handlePress(element, frequency) {
+  initAudioContext();
+  reproducirSonido(frequency);
+  element.classList.add('highlighted');
+}
+
+function handleRelease(element, frequency) {
+  detenerSonido(frequency);
+  element.classList.remove('highlighted');
+} 
+ </script>
+ 
+</body>
+</html>
